@@ -1,0 +1,337 @@
+<html>
+<head>
+</head>
+<body>
+  <canvas id="fractal-canvas" width="300" height="200"></canvas>
+<script>
+// Fun with fractals --
+// This is almost a direct transcoding of
+//  http://www.chiark.greenend.org.uk/~sgtatham/newton/newton.c
+//
+// See http://www.chiark.greenend.org.uk/~sgtatham/newton/ for a lot of
+// interesting discussion
+
+// Original license follows:
+
+/* newton.c - draw fractals based on the convergence of the Newton-
+ * Raphson algorithm in the complex plane in the presence of
+ * multiple roots
+ *
+ * This program is copyright 2000 Simon Tatham.
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT.  IN NO EVENT SHALL SIMON TATHAM BE LIABLE FOR
+ * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+ * CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+function Complex(r, i) {
+  if (typeof r == 'undefined') { r = 0.0; }
+  if (typeof i == 'undefined') { i = 0.0; }
+  this.r = r;
+  this.i = i;
+}
+
+Complex.prototype.add = function(o) {
+  return new Complex(
+    this.r + o.r,
+    this.i + o.i
+  );
+}
+
+Complex.prototype.sub = function(o) {
+  return new Complex(
+    this.r - o.r,
+    this.i - o.i
+  );
+}
+
+Complex.prototype.mul = function(o) {
+  return new Complex(
+    this.r * o.r - this.i * o.i,
+    this.i * o.r + this.r * o.i
+  );
+}
+
+Complex.prototype.div = function(o) {
+  var divisor = o.r * o.r + o.i * o.i;
+  return new Complex(
+    (this.r * o.r + this.i * o.i) / divisor,
+    (this.i * o.r - this.r * o.i) / divisor
+  );
+}
+
+Complex.prototype.distSquared = function(o) {
+  var dr, di;
+  dr = this.r - o.r;
+  di = this.i - o.i;
+  return dr * dr + di * di;
+}
+
+function plot(params) {
+  var cZero = new Complex(0.0);
+  var cOne  = new Complex(1.0);
+
+  var px, py;
+  var i;
+  var z, d, prevZ, overpower;
+  var iterations, root;
+  var iflt, fade;
+  var tolerance;
+  var factors = [];
+  var roots = params.roots;
+
+  overpower = new Complex(params.overpower);
+
+  // Raising the whole function to a power is equivalent to
+  // raising each individual term to that power. It's a bit
+  // hacky, but by far the easiest way to do this is to modify
+  // the factors list at the start.
+  for (i = 0; i < roots.length; ++i) {
+    factors.push(overpower.mul((params.factors || {})[i] || new Complex(1)));
+  }
+
+/*  if (params.preview) {
+    tolerance = 8 * 8 *
+      Math.abs((params.y1 - params.y0) * (params.x1 - params.x0)) /
+      (params.height * params.width);
+  } else { */
+    tolerance = 1e-10;
+/*  } */
+
+  for (py = 0; py < params.height; ++py) {
+    for (px = 0; px < params.width; ++px) {
+      z = new Complex(
+        params.x0 + (params.x1 - params.x0) * (px / params.width),
+        params.y0 + (params.y1 - params.y0) * (py / params.height)
+      );
+      prevZ = z;
+
+/*
+      if (params.preview) {
+        struct RGB c;
+
+        // Special mode for previewing the movement of the
+        // roots in an animation. In this mode we simply
+        // draw a small and crude circle around each root.
+        root = -1;
+        for (k = 0; k < params.roots.n; k++) {
+            if (cdistsquared(z, params.roots.list[k]) < tolerance)
+          root = k;
+        }
+        if (root >= 0)
+            c = colfind(params.colors, root);
+        else
+            c.r = c.g = c.b = 0;
+        bmppixel(bm, toint(c.r*255.0), toint(c.g*255.0),
+        toint(c.b*255.0));
+        continue;
+      }
+*/
+
+      // For each point, begin an iteration at z.
+      iterations = 0;
+      root = -1;
+      while (true) {
+        // Test proximity to each root
+        for (i = 0; i < roots.length; ++i) {
+          if (z.distSquared(roots[i]) < tolerance) {
+            root = i;
+            break;
+          }
+        }
+        if (root >= 0) {
+          break;
+        }
+        prevZ = z;
+
+        // Newton-Raphson on a function of this type is easy. We're computing:
+        //
+        //    z <- z - f(z) / f'(z)
+        //
+        // But when f(z) is the product of a large number of small fi(z), f(z)
+        // and f'(z) are intimately related. Consider:
+        //
+        //    f(z) = product fi(z)
+        //              i
+        //
+        // and so, by the product rule,
+        //
+        // d/dz product fi(z) = sum (fi'(z) . product fj(z))
+        //         i             i            j =/= i
+        //
+        //                    = sum (fi'(z)/fi(z) . product fj(z))
+        //                       i                     j
+        //
+        //                    = sum (fi'(z)/fi(z) . f(z))
+        //                       i
+        //
+        // => f'(z) = f(z) . sum ( fi'(z) / fi(z) )
+        //                    i
+        //
+        // Now each fi(z) will be of the form (z-a)^alpha. So:
+        //
+        //    fi(z) = (z-a)^alpha
+        // => fi'(z) = alpha*(z-a)^(alpha-1)
+        // => fi'(z)/fi(z) = alpha/(z-a)
+        //
+        // Hence, our complete formula says that
+        //
+        //    f'(z)/f(z) =  sum  alpha_i/(z-a_i)
+        //                   i
+        //
+        // So we compute that, and then subtract its reciprocal from z, and
+        // we're done!
+        d = cZero;
+        for (i = 0; i < roots.length; i++) {
+          d = d.add(factors[i].div(z.sub(roots[i])));
+        }
+
+        if (d.r == 0 && d.i == 0) {
+          root = -1;
+          break;
+        }
+        z = z.sub(cOne.div(d));
+
+        ++iterations;
+        if (iterations > params.limit) {
+          root = -1;
+          break;
+        }
+      }
+
+      if (params.blur && root >= 0) {
+        // Adjust the integer iteration count by an ad-hoc measure of the
+        // `fractional iteration count'. We guess at this by calculating how
+        // far between the one value of z and the next the tolerance level
+        // appeared: if one value of z was only just outside the tolerance
+        // level and the next was way inside it, we add virtually zero to the
+        // iteration count, but if one value was miles outside the tolerance
+        // level and the next was only just inside it we add almost 1.
+        //
+        // This is done on a logarithmic scale, because tests show that works
+        // much better.
+        var dist0, dist1;
+        var logt, log0, log1, proportion;
+
+        dist0 = prevZ.distSquared(roots[root]);
+        dist1 = z.distSquared(roots[root]);
+
+        if (dist1 < tolerance && dist0 > tolerance) {
+          logt = Math.log(tolerance);
+          log0 = Math.log(dist0);
+          log1 = Math.log(dist1);
+          proportion = (logt - log0) / (log1 - log0);
+        } else {
+          proportion = 0;
+        }
+        iflt = iterations + proportion;
+      } else {
+        iflt = iterations;
+      }
+
+      if (params.cyclic) {
+        fade = 1.0 - Math.abs(iflt % params.nFade) / (params.nFade);
+      } else {
+        fade = Math.pow(1.0 - 1.0 / params.nFade, iflt);
+      }
+      fade = params.minFade + (1.0 - params.minFade) * fade;
+
+      function lookupColor(colors, idx) {
+        if (idx < 0) {
+          return colors[0];
+        }
+        return colors[1 + idx % (colors.length - 1)];
+      }
+
+      color = lookupColor(params.colors, root);
+      fade *= 255.0;
+      params.draw(px, py, [color[0] * fade,
+                           color[1] * fade,
+                           color[2] * fade]);
+
+    }
+  }
+}
+
+var canvas = document.getElementById('fractal-canvas');
+var ctx = canvas.getContext('2d');
+var draw = function(x, y, color) {
+  ctx.fillStyle = 'rgb(' + ~~color[0] + ','
+                         + ~~color[1] + ','
+                         + ~~color[2] + ')';
+  ctx.fillRect(x, y, 1, 1);
+}
+
+var colors = [
+  [0, 0, 0], // null color
+  [1,0,0],
+  [1,1,0],
+  [0,0.7,0],
+  [0,0.5,1],
+];
+
+var xRange = 3.0,
+    yRange = 3.0,
+    xCenter = 0.0,
+    yCenter = 0.0;
+
+var animating = false;
+var t = 0;
+var step = 0.03;
+
+function animate() {
+  if (!animating) { return; }
+
+  if (t > 2 * Math.PI) { t -= 2 * Math.PI; }
+
+  var roots = [
+    new Complex(Math.sin(t), Math.sin(2*t)),
+    new Complex(Math.sin(t + Math.PI * 2 / 3), Math.sin(2 * (t + Math.PI * 2 / 3))),
+    new Complex(Math.sin(t + Math.PI * 4 / 3), Math.sin(2 * (t + Math.PI * 4 / 3)))
+  ];
+
+  plot({
+    overpower: 1,
+    limit: 128,
+    preview: false,
+    roots: roots,
+    colors: colors,
+    nFade: 16,
+    minFade: 0.5,
+    cyclic: true,
+    blur: false,
+    width: canvas.width,
+    height: canvas.height,
+    x0: xCenter - (xRange / 2.0),
+    x1: xCenter + (xRange / 2.0),
+    y0: yCenter - (yRange / 2.0),
+    y1: yCenter + (yRange / 2.0),
+    draw: draw
+  });
+
+  t += step;
+  setTimeout(animate, 0);
+}
+
+</script>
+<br/>
+<button onclick="animating = !animating; animate();">Play / Pause</button>
+</body>
+</html>
