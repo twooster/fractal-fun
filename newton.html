@@ -291,28 +291,19 @@ var step = 0.03;
 function animate() {
   if (!animating) { return; }
 
-  if (t > 2 * Math.PI) { t -= 2 * Math.PI; }
-
   var canvas = document.getElementById('fractal-canvas');
   var ctx = canvas.getContext('2d');
   var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-  /*
-  var draw = function(x, y, color) {
-    ctx.fillStyle = 'rgb(' + ~~color[0] + ','
-                          + ~~color[1] + ','
-                          + ~~color[2] + ')';
-    ctx.fillRect(x, y, 1, 1);
-  }
-  */
   var draw = function(x, y, color) {
     var offset = (x + y * canvas.width) * 4;
     imgData.data[offset++] = Math.min(~~color[0], 255);
     imgData.data[offset++] = Math.min(~~color[1], 255);
     imgData.data[offset++] = Math.min(~~color[2], 255);
     imgData.data[offset++] = 255;
-    //imgData.data[x + y * canvas.width
   }
+
+  if (t > 2 * Math.PI) { t -= 2 * Math.PI; }
 
   var roots = [
     new Complex(Math.sin(t), Math.sin(2*t)),
