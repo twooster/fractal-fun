@@ -1,0 +1,135 @@
+<html>
+<head>
+</head>
+<body>
+  <canvas id="fractal-canvas" width="600" height="600"></canvas>
+<script>
+var GRAV_CONST = 6.67e-11; // N * (m / kg) ^ 2
+var PRECISION = 10;
+var MAX_ITERATIONS = 256;
+var STEP = 0.1;
+
+function calculateGravityPath(body, wells, step, accumPath) {
+  var x = body.x,
+      y = body.y,
+      m = body.m,
+      vx = 0, vy = 0,
+      iterations = 0,
+      ax, ay;
+
+  for (iterations = 0; iterations < MAX_ITERATIONS; ++iterations) {
+    ax = ay = 0;
+
+    for (var wellIdx = 0; wellIdx < wells.length; ++wellIdx) {
+      var well = wells[wellIdx],
+          dx = (well.x - x),
+          dy = (well.y - y),
+          dist = Math.sqrt(dx * dx + dy * dy),
+          force = GRAV_CONST * m * well.m / dist;
+
+      if (dist < PRECISION) {
+        return wellIdx;
+      }
+
+      ax += (dx / dist) * force;
+      ay += (dy / dist) * force;
+    }
+
+    vx += ax * step;
+    vy += ay * step;
+    x += vx * step;
+    y += vy * step;
+
+    if (accumPath) {
+      accumPath(x, y);
+    }
+  }
+  return -1;
+}
+
+var canvas = document.getElementById('fractal-canvas');
+
+var movers = [];
+var wells = [];
+
+for (var i = 0; i < 5; ++i) {
+  var mover =
+    { x: canvas.width * Math.random(),
+      y: canvas.height * Math.random(),
+      vx: 0,
+      vy: 0,
+      m: 1000000 };
+  movers.push(mover);
+}
+
+for (var i = 0; i < 3; ++i) {
+  var well =
+    { x: canvas.width * Math.random(),
+      y: canvas.height * Math.random(),
+      m: 10000000 };
+  wells.push(well);
+}
+
+var t = 0;
+
+function render() {
+  var ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  var drawPoint = function(point, color) {
+    ctx.beginPath();
+    ctx.fillStyle = 'rgb(' + Math.min(~~color[0], 255) + ','
+                           + Math.min(~~color[1], 255) + ','
+                           + Math.min(~~color[2], 255) + ')';
+    ctx.arc(point[0], point[1], 2.0, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+
+  var drawPath = function(points, color) {
+    var i;
+    if (points.length < 2) { return; }
+
+    // move to the first point
+    ctx.beginPath();
+    ctx.moveTo(points[0][0], points[0][1]);
+    ctx.strokeStyle = 'rgb(' + Math.min(~~color[0], 255) + ','
+                             + Math.min(~~color[1], 255) + ','
+                             + Math.min(~~color[2], 255) + ')';
+
+    for (i = 1; i < points.length - 2; ++i) {
+      var xc = (points[i][0] + points[i + 1][0]) / 2;
+      var yc = (points[i][1] + points[i + 1][1]) / 2;
+      ctx.quadraticCurveTo(points[i][0], points[i][1], xc, yc);
+    }
+    // curve through the last two points
+    ctx.quadraticCurveTo(points[i][0], points[i][1], points[i+1][0], points[i+1][1]);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+
+  var wells = [];
+    var path = [];
+    var result = calculateGravityPath(mover, wells, 0.1, function(x, y) { path.push([x,y]); });
+
+    if (result == -1) {
+      drawPath(path, [200, 200, 200]);
+    } else {
+      drawPath(path, [0, 0, 255]);
+    }
+    drawPoint([mover.x, mover.y], [0, 255, 0]);
+  }
+
+  for (var i = 0; i < wells.length; ++i) {
+    drawPoint([wells[i].x, wells[i].y], [255, 0, 0]);
+  }
+
+  t += STEP;
+}
+
+</script>
+<br/>
+<button onclick="render()">Play / Pause</button>
+</body>
+</html>
