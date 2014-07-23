@@ -1,0 +1,56 @@
+<html>
+<head>
+</head>
+<body>
+  <canvas id="fractal-canvas" width="600" height="600"></canvas>
+  <script src="gravtree.js"></script>
+  <script>
+var canvas = document.getElementById('fractal-canvas');
+var worldWidth = 10000,
+    worldHeight = 10000,
+    popDim = 5000;
+var simulation = new Simulation({ minX: 0, minY: 0, maxX: worldWidth, maxY: worldHeight });
+
+for (var i = 0; i < 3000; ++i) {
+  var ang = Math.random() * 2 * Math.PI;
+  var radius = Math.random() * (popDim / 2);
+  //var x = (Math.random() - 0.5) * popDim + worldWidth / 2;
+  //var y = (Math.random() - 0.5) * popDim + worldWidth / 2;
+
+  var x = Math.cos(ang) * radius + worldWidth / 2;
+  var y = Math.sin(ang) * radius + worldHeight / 2;
+  simulation.addPoint(new GravTreePoint(x, y, 1000.0 * Math.ceil(Math.random() * 10000)));
+}
+
+function render() {
+  var ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  var drawPoint = function(point, color) {
+    ctx.beginPath();
+    ctx.fillStyle = 'rgb(' + Math.min(~~color[0], 255) + ','
+                           + Math.min(~~color[1], 255) + ','
+                           + Math.min(~~color[2], 255) + ')';
+    ctx.arc(point[0], point[1], 2.0, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+
+  simulation.simulateStep(10);
+
+  for (var i = 0; i < simulation.points.length; ++i) {
+    var p = simulation.points[i];
+    drawPoint([p.x / worldWidth * canvas.width,
+               p.y / worldHeight * canvas.height],
+              [0, Math.min(Math.log(p.m) * 12, 255), 0]);
+  }
+
+  setTimeout(render, 0);
+}
+
+</script>
+<br/>
+<button onclick="animate = !animate; render()">Play / Pause</button>
+</body>
+</html>
