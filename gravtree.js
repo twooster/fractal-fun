@@ -539,11 +539,6 @@ function walkAndCollectTwoSublevelNodes(node, path, subDir1, subDir2) {
     }
   }
 
-
-  // TODO FIXME
-
-  return [node];
-
   if (i == -1 && (sub = node[subDir1])) {
     nodes.push(node[subDir1]);
     if (subSub = sub[subDir1]) {
